@@ -1,55 +1,133 @@
-import React from "react";
-import logo from "./logo.svg";
-import "./App.css";
+// src/components/ReportForm.js
+import React, { useState, useEffect } from 'react';
+import {
+  fetchSectors, fetchCategories,
+  fetchSeverities, fetchPriorities, fetchStatuses,
+  createReport
+} from '../api';
 
-/**
- * Uses Tailwind CSS for styling
- * Tailwind file is imported in App.css
- */
+export default function ReportForm() {
+  const [lookups, setLookups] = useState({});
+  const [form, setForm]   = useState({
+    sector:'', category:'', severity:'', priority:'', status:'',
+    title:'', description:'',
+    latitude:null, longitude:null
+  });
+  const [msg, setMsg]     = useState('');
 
-export default function App() {
+  useEffect(() => {
+    Promise.all([
+      fetchSectors(), fetchSeverities(),
+      fetchPriorities(), fetchStatuses()
+    ]).then(([sectors, sev, pri, stat]) => {
+      setLookups({ sectors, severities:sev, priorities:pri, statuses:stat });
+    });
+    navigator.geolocation.getCurrentPosition(pos => {
+      setForm(f => ({ ...f,
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude
+      }));
+    });
+  }, []);
+
+  const handleChange = e =>
+    setForm(f => ({ ...f, [e.target.name]: e.target.value }));
+
+  const handleSubmit = async e => {
+    e.preventDefault();
+    try {
+      const payload = {
+        org: 1,                      // or your actual org ID
+        reported_by: 1,              // your johndoe user ID
+        asset: null,
+        sector: Number(form.sector),
+        category: Number(form.category),
+        severity: Number(form.severity),
+        priority: Number(form.priority),
+        status:   Number(form.status),
+        title: form.title,
+        description: form.description,
+        latitude: form.latitude,
+        longitude: form.longitude
+      };
+      const res = await createReport(payload);
+      setMsg(`Report submitted! ID ${res.id}`);
+      setForm(f => ({ ...f, title:'', description:'' }));
+    } catch(err) {
+      console.error(err);
+      setMsg('Failed to submit.');
+    }
+  };
+
   return (
-    <div className="app min-h-screen text-blue-200 flex items-center flex-col p-20">
-      <div className="mb-10 grid grid-cols-4 grid-rows-2 w-1/2 mx-auto">
-        <img className="opacity-25" src={logo} alt="React Logo" width="300" />
-        <img
-          className="col-span-2 row-span-3 animate-spin m-auto"
-          style={{ animationDuration: "30s" }}
-          src={logo}
-          alt="React Logo"
-          width="300"
-        />
-        <img className="opacity-25" src={logo} alt="React Logo" width="300" />
-        <img className="opacity-25" src={logo} alt="React Logo" width="300" />
-        <img className="opacity-25" src={logo} alt="React Logo" width="300" />
-      </div>
+    <form onSubmit={handleSubmit}>
+      <h2>New Infrastructure Report</h2>
+      {msg && <p>{msg}</p>}
 
-      <h1 className="text-2xl lg:text-5xl mb-10 text-right">
-        Welcome to Your New React App{" "}
-        <span className="block text-lg text-blue-400">on DigitalOcean</span>
-      </h1>
+      <label>Sector
+        <select name="sector" value={form.sector} onChange={handleChange} required>
+          <option value="">— select —</option>
+          {lookups.sectors?.map(s =>
+            <option key={s.id} value={s.id}>{s.name}</option>
+          )}
+        </select>
+      </label>
 
-      <div className="grid grid-cols-2 grid-rows-2 gap-4">
-        <Button
-          text="DigitalOcean Docs"
-          url="https://www.digitalocean.com/docs/app-platform"
-        />
-        <Button
-          text="DigitalOcean Dashboard"
-          url="https://cloud.digitalocean.com/apps"
-        />
-      </div>
-    </div>
-  );
-}
+      <label>Category
+        <select name="category" value={form.category} onChange={handleChange} required>
+          <option value="">— select —</option>
+          {lookups.categories
+            ?.filter(c => c.sector === Number(form.sector))
+            .map(c => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+        </select>
+      </label>
 
-function Button({ className, text, url = "#" }) {
-  return (
-    <a
-      href={url}
-      className={`${className} py-3 px-6 bg-purple-400 hover:bg-purple-300 text-purple-800 hover:text-purple-900 block rounded text-center shadow flex items-center justify-center leading-snug text-xs transition ease-in duration-150`}
-    >
-      {text}
-    </a>
+      <label>Severity
+        <select name="severity" value={form.severity} onChange={handleChange} required>
+          {lookups.severities?.map(s =>
+            <option key={s.id} value={s.id}>{s.name}</option>
+          )}
+        </select>
+      </label>
+
+      <label>Priority
+        <select name="priority" value={form.priority} onChange={handleChange} required>
+          {lookups.priorities?.map(p =>
+            <option key={p.id} value={p.id}>{p.name}</option>
+          )}
+        </select>
+      </label>
+
+      <label>Status
+        <select name="status" value={form.status} onChange={handleChange} required>
+          {lookups.statuses?.map(s =>
+            <option key={s.id} value={s.id}>{s.name}</option>
+          )}
+        </select>
+      </label>
+
+      <label>Title
+        <input
+          name="title"
+          value={form.title}
+          onChange={handleChange}
+          required
+        />
+      </label>
+
+      <label>Description
+        <textarea
+          name="description"
+          value={form.description}
+          onChange={handleChange}
+        />
+      </label>
+
+      <p>Coords: {form.latitude?.toFixed(5)}, {form.longitude?.toFixed(5)}</p>
+
+      <button type="submit">Submit Report</button>
+    </form>
   );
 }
